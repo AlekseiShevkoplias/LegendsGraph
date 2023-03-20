@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph with Tabs</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.css" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+
+    <style>
+        #graph {
+            width: 100%;
+            height: 400px;
+            border: 1px solid lightgray;
+        }
+          .close-btn {
+    margin-left: 8px;
+    cursor: pointer;
+  }
+  
+     .dropdown-menu {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    #search-input {
+      width: 100%;
+    }	
+    </style>
+</head>
+<body>
+    <div class="container mt-3">
+        <ul class="nav nav-tabs">
+            <li class="nav-item">
+                <a class="nav-link active" id="graph-tab" data-toggle="tab" href="#graphContainer">Graph</a>
+            </li>
+        </ul>
+        <div class="tab-content">
+            <div class="tab-pane container active" id="graphContainer">
+            <div class="dropdown">
+  <button class="btn btn-secondary dropdown-toggle" type="button" id="node-select-btn" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+    Select a node
+  </button>
+  <div class="dropdown-menu" aria-labelledby="node-select-btn" id="node-select-menu">
+    <div class="input-group mb-3">
+      <div class="input-group-prepend">
+        <span class="input-group-text" id="search-icon"><i class="fas fa-search"></i></span>
+      </div>
+      <input type="text" id="search-input" class="form-control" placeholder="Search nodes">
+    </div>
+  </div>
+</div>
+
+
+                <div id="graph"></div>
+            </div>
+        </div>
+    </div>
+ 
+ <script>
+
+  
+ function createTab(nodeId, connectedNodes) {
+  const tabId = 'tab-' + nodeId;
+  const contentId = 'content-' + nodeId;
+
+  if (!$('#' + tabId).length) {
+    const closeButton = `<span class="close-btn" onclick="closeTab('${tabId}', '${contentId}')">&times;</span>`;
+    const tab = `<li class="nav-item" id="${tabId}"><a class="nav-link" data-toggle="pill" href="#${contentId}">Node ${nodeId}${closeButton}</a></li>`;
+    const content = `<div id="${contentId}" class="container tab-pane fade"><h3>Node ${nodeId}</h3><p>Connected nodes: ${connectedNodes.join(', ')}</p></div>`;
+    
+$('.nav-tabs').append(tab);
+$('.tab-content').append(content);
+  }
+  
+  $('#' + tabId + ' a').tab('show');
+}
+  function closeTab(tabId, contentId) {
+  $('#' + tabId).remove();
+  $('#' + contentId).remove();
+  
+  // Show the default tab after closing
+  $('#graph-tab-1').tab('show');
+}
+document.addEventListener('DOMContentLoaded', function() {
+  // Fetch graph data from the JSON file
+  fetch('historical_events.json')
+    .then(response => response.json())
+    .then(data => {
+      // Create a graph with the fetched data
+      var nodes = new vis.DataSet(data.nodes);
+      var edges = new vis.DataSet(data.edges);
+      var container = document.getElementById('graph');
+      var data = {
+        nodes: nodes,
+        edges: edges
+      };
+      var options = {
+        interaction: {
+          hover: true,
+          dragNodes: true,
+          zoomView: true
+        },
+        layout: {
+          improvedLayout: false,
+        },
+        physics: {
+          enabled: true,
+          solver: "forceAtlas2Based",
+          stabilization: {
+            enabled: false,
+            iterations: 1000,
+            updateInterval: 50,
+            onlyDynamicEdges: false,
+            fit: true,
+            damping: 0.9
+          }
+        },
+        clusters: {
+          clusterThreshold: 5,
+          // Use the community algorithm to cluster nodes based on degree
+          // See: https://github.com/visjs/vis-clustering
+          algorithm: 'community',
+          clusterEdgeProperties: {
+            style: 'dashed',
+            width: 2
+          },
+          clusterNodeProperties: {
+            shape: 'dot',
+            font: {
+              size: 18,
+              color: '#ffffff'
+            },
+            borderWidth: 2,
+            color: {
+              background: '#ffffff',
+              border: '#2B7CE9',
+              highlight: {
+                background: '#ffffff',
+                border: '#2B7CE9'
+              }
+            }
+          }
+        }
+      };
+
+      // Create a new dataset to hold the cluster data
+      var clusterData = {
+        nodes: [],
+        edges: []
+      };
+      var clusterIndex = 0;
+
+      // Define the join condition for clustering nodes
+      var joinCondition = function(nodeOptions) {
+        return nodeOptions.degree > options.clusters.clusterThreshold;
+      };
+
+      // Use the vis-clustering library to create clusters
+      var clusterer = new vis.Clustering({
+        joinCondition: joinCondition,
+        clusterNodeProperties: options.clusters.clusterNodeProperties,
+        clusterEdgeProperties: options.clusters.clusterEdgeProperties
+      });
+      clusterer.cluster(data.nodes, clusterData);
+
+      // Create a new dataset for the clustered graph data
+      var clusteredNodes = new vis.DataSet(clusterData.nodes);
+      var clusteredEdges = new vis.DataSet(clusterData.edges);
+      var clusteredData = {
+        nodes:     clusteredNodes,
+    edges: clusteredEdges
+  };
+
+  // Create the graph using the clustered data
+  var graph = new vis.Network(container, clusteredData, options);
+  graph.on('click', function (params) {
+    if (params.nodes.length > 0) {
+      var nodeId = params.nodes[0];
+      window.alert(nodeId);
+      var nodeLabel = clusteredNodes.get(nodeId).label;
+      var connectedNodes = graph.getConnectedNodes(nodeId);
+      createTab(nodeId, connectedNodes);
+    }
+  });
+  var button = document.getElementById('center-button');
+  button.onclick = function() {
+    centerNode(graph, 1906);
+  };
+  function centerNode(graph, nodeId) {
+    var position = graph.getPositions([nodeId]);
+    graph.moveTo({
+      position: position[nodeId],
+      scale: 1,
+      animation: true,
+      easingFunction: 'easeInOutQuad'
+    });
+  }
+
+  // Print stabilization progress to console every 5 seconds
+  var isStabilized = false;
+  graph.on('stabilizationIterationsDone', function() {
+    if (!isStabilized) {
+      isStabilized = true;
+      setInterval(function() {
+        console.log(graph.stabilizationProgress.progress);
+      }, 5000);
+    }
+  });
+});
+});
+
+</script>
+
+</body>
+</html>
+  
+
+
